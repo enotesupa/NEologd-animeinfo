@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from threading import Thread
 import urllib2
 import time
 import math
@@ -65,15 +66,23 @@ def namefilter(name):
 
     return name.replace(' ', '').replace('　', '')
 
-def HTMLparser(pairs):
+def HTMLparser(pairs, spt, num):
     template_url = "https://www.animecharactersdatabase.com/jp/source.php?id="
+    tmp_pairs = []
 
-    start = time.time()
-
-    for page_id in range(1,10):
+    for page_id in range(1+spt*num, spt+spt*num+1):
         url = template_url + str(page_id)
-        htmldata = urllib2.urlopen(url)
-        page = htmldata.read()
+        page = ""
+
+        while True:
+            try:
+                htmldata = urllib2.urlopen(url)
+                page = htmldata.read()
+                break
+            except urllib2.URLError, err:
+                print("Connection failed, trying again...")
+            except urllib2.HTTPError, err:
+                print("Connection failed, trying again...")
 
         # キャラクター検索
         characters = []
@@ -101,14 +110,13 @@ def HTMLparser(pairs):
                 break
 
         for character in characters:
-            pairs.append((namefilter(character), title))
+            tmp_pairs.append((namefilter(character), title))
             #print(namefilter(character))   
         
         #print unicode(htmldata.read(),"utf-8")
         htmldata.close()
-    
-    elapsed_time = time.time() - start
-    print(("elapsed_time:{0}".format(round(elapsed_time,2))) + "[sec]")
+
+    pairs.extend(tmp_pairs)
 
 def NEologdsearch(word):
     
@@ -130,9 +138,26 @@ if __name__ == "__main__":
     tmp_written = 0
     written = 0
     non_written = 0
-    
-    HTMLparser(pairs)
 
+    threads = []
+    # 3スレッド以上だとよくConnection Refuseされる
+    threads_size = 2
+    # 作品数指定
+    sites = 6061
+    spt = int(sites/threads_size)
+
+    start = time.time()
+    
+    for i in range(0, threads_size):
+        threads.append(Thread(target=HTMLparser, args=(pairs, spt, i, )))
+        threads[i].daemon = True
+        threads[i].start()
+    for i in range(0, threads_size):
+        threads[i].join()
+
+    elapsed_time = time.time() - start
+    print(("elapsed_time:{0}".format(round(elapsed_time,2))) + "[sec]")
+    
     for pair in pairs:
         if NEologdsearch(pair[0]):
             # dictにすることで重複データは最新のものに上書き
