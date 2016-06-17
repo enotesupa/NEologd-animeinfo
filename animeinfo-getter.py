@@ -7,6 +7,8 @@ import csv
 import MeCab
 
 class MC:
+    m = MeCab.Tagger(' -d /usr/lib/mecab/dic/mecab-ipadic-neologd')
+    
     name = 0
     speech = 1
     detail_speech = 2
@@ -21,7 +23,8 @@ class MC:
     pattern1 = re.compile("(.*)/(.*)（(.*)）")
     pattern2 = re.compile("(.*)（(.*)）")
     pattern25 = re.compile("(.*)\((.*)\)")
-    pattern3 = re.compile("(.*)/(.*)")    
+    pattern3 = re.compile("(.*)/(.*)")
+    pattern35 = re.compile("(.*)（(.*)） / (.*)（(.*)）")
     pattern4 = re.compile("(.*)")
 
 def namefilter(name):    
@@ -29,9 +32,17 @@ def namefilter(name):
     pattern2 = MC.pattern2.search(name)
     pattern25 = MC.pattern25.search(name)
     pattern3 = MC.pattern3.search(name)
+    pattern35 = MC.pattern35.search(name)
     pattern4 = MC.pattern4.search(name)
 
-    if pattern1:
+    if pattern35:
+        tmp1 = pattern35.group(1)
+        tmp2 = pattern35.group(3)
+        if len(tmp1) > len(tmp2):
+            name = tmp1
+        else:
+            name = tmp2
+    elif pattern1:
         tmp1 = pattern1.group(1)
         tmp2 = pattern1.group(2)
         if len(tmp1) > len(tmp2):
@@ -54,8 +65,7 @@ def namefilter(name):
 
     return name.replace(' ', '').replace('　', '')
 
-
-def HTMLparser():
+def HTMLparser(pairs):
     template_url = "https://www.animecharactersdatabase.com/jp/source.php?id="
 
     start = time.time()
@@ -87,11 +97,12 @@ def HTMLparser():
                 title_r = re.compile("(.*)\<(.*)\>\<(.*)\>(.*)\<(.*)\>\<(.*)\>")
                 title_m = title_r.search(lines[line_num])
                 title = title_m.group(4)
-                print("作品名: "+title)
+                print(str(page_id)+" 作品名: "+title)
                 break
 
         for character in characters:
-            print(namefilter(character))   
+            pairs.append((namefilter(character), title))
+            #print(namefilter(character))   
         
         #print unicode(htmldata.read(),"utf-8")
         htmldata.close()
@@ -99,38 +110,52 @@ def HTMLparser():
     elapsed_time = time.time() - start
     print(("elapsed_time:{0}".format(round(elapsed_time,2))) + "[sec]")
 
+def NEologdsearch(word):
+    
+    elements = MC.m.parse(word).split('\n')
+
+    for element in elements:
+        splitted_element = re.split(u'\t|,', element)
+        if (splitted_element[MC.name] == word) and (splitted_element[MC.speech_type] == "人名"):
+            return True
+
+    return False
+        
+
 
 if __name__ == "__main__":
+    # 単語とメタ情報の組の配列
+    pairs = []
+    metadict = {}
+    tmp_written = 0
+    written = 0
+    non_written = 0
     
-    # NEologdインストール先指定
-    m = MeCab.Tagger(' -d /usr/lib/mecab/dic/mecab-ipadic-neologd')
+    HTMLparser(pairs)
+
+    for pair in pairs:
+        if NEologdsearch(pair[0]):
+            # dictにすることで重複データは最新のものに上書き
+            metadict[pair[0]] = pair[1]
+            tmp_written += 1
+        else:
+            non_written += 1
     
-    # 検索単語
-    text = '''
-    10日放送の「中居正広のミになる図書館」（テレビ朝日系）で、SMAPの中居正広が、篠原信一の過去の勘違いを明かす一幕があった。
-    '''
-    
-    elements = m.parse(text).split('\n')
-    
-    # 要素数(2個以上だったら排除)
-    print(len(elements))
-    
-    element2 = re.split(u'\t|,', elements[0])
-    
-    f = open('data.csv', 'ab')
+    f = open('data.csv', 'w')
     csvWriter = csv.writer(f)
-    
+
     # CSVファイルへ書き込み
-    for num in range(0, 5):
-        listData = []
-        tmp_ele = re.split(u'\t|,', elements[num])
+    for key,value in metadict.items():
+        writeData = []
         # 単語名
-        listData.append(tmp_ele[MC.name])
+        writeData.append(key)
         # メタ情報
-        listData.append(tmp_ele[MC.rigid_pronounce])
-        csvWriter.writerow(listData)
+        writeData.append(value)
+        csvWriter.writerow(writeData)
+        written += 1
         
     f.close()
 
-    
-    HTMLparser()
+    print(str(written)+" characters written!")
+    print(str(tmp_written-written)+" characters duplicated!")
+    print(str(non_written)+" characters not written!")
