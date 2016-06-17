@@ -21,111 +21,188 @@ class MC:
     rigid_pronounce = 8
     actual_pronounce = 9
 
-    pattern1 = re.compile("(.*)/(.*)（(.*)）")
+    pattern1 = re.compile("\<(.*)\><(.*)\>(.*)\((.*)\)\<(.*)\>\<(.*)\>")
     pattern2 = re.compile("(.*)（(.*)）")
-    pattern25 = re.compile("(.*)\((.*)\)")
-    pattern3 = re.compile("(.*)/(.*)")
-    pattern35 = re.compile("(.*)（(.*)） / (.*)（(.*)）")
-    pattern4 = re.compile("(.*)")
+    pattern3 = re.compile("\<(.*)\>(.*)\<(.*)\>")
+    pattern5 = re.compile("\<(.*)\>(.*)（(.*)）\<(.*)\>")
+    pattern6 = re.compile("(.*)（(.*)）/(.*)")
+    pattern7 = re.compile("(.*)/(.*)")
+    pattern8 = re.compile("(.*)（(.*)）<(.*)\>\<(.*)\>\[(.*)\]\<(.*)\>")
+    
+    title_r1 = re.compile("\<td\>\<b\>\<a href(.*)\>(.*)\</a\>\</b\>\</td\>")
+    title_r2 = re.compile("\<li\>\<a href(.*)\>(.*)\</a\>(.*)")
+    character_r = re.compile("\<dt\>(.*)\<(.*)\>")
 
-def namefilter(name):    
-    pattern1 = MC.pattern1.search(name)
-    pattern2 = MC.pattern2.search(name)
-    pattern25 = MC.pattern25.search(name)
-    pattern3 = MC.pattern3.search(name)
-    pattern35 = MC.pattern35.search(name)
-    pattern4 = MC.pattern4.search(name)
+    hiragana = ["あ行", "か行", "さ行", "た行", "な行", "は行", "ま行", "や行", "ら行",
+                "わ・を・ん行", "アルファベット",]
 
-    if pattern35:
-        tmp1 = pattern35.group(1)
-        tmp2 = pattern35.group(3)
-        if len(tmp1) > len(tmp2):
-            name = tmp1
-        else:
-            name = tmp2
-    elif pattern1:
-        tmp1 = pattern1.group(1)
-        tmp2 = pattern1.group(2)
-        if len(tmp1) > len(tmp2):
-            name = tmp1
-        else:
-            name = tmp2
-    elif pattern2:
-        name = pattern2.group(1)
-    elif pattern25:
-        name = pattern25.group(1)
+def namefilter(name):
+    tmp_name = name.replace(' ', '').replace('　', '')
+    
+    pattern1 = MC.pattern1.search(tmp_name)
+    pattern2 = MC.pattern2.search(tmp_name)
+    pattern3 = MC.pattern3.search(tmp_name)
+    pattern5 = MC.pattern5.search(tmp_name)
+    pattern6 = MC.pattern6.search(tmp_name)
+    pattern7 = MC.pattern7.search(tmp_name)
+    pattern8 = MC.pattern8.search(tmp_name)
+
+    if pattern1:
+        tmp_name = pattern1.group(3)
+    elif pattern8:
+        tmp_name = pattern8.group(1)
+    elif pattern5:
+        tmp_name = pattern5.group(2)
     elif pattern3:
-        tmp1 = pattern3.group(1)
-        tmp2 = pattern3.group(2)
+        tmp_name = pattern3.group(2)
+    elif pattern6:
+        tmp1 = pattern6.group(1)
+        tmp2 = pattern6.group(3)
         if len(tmp1) > len(tmp2):
-            name = tmp1
+            tmp_name = tmp1
         else:
-            name = tmp2
-    elif pattern4:
-        name = pattern4.group(1)
+            tmp_name = tmp2
+    elif pattern7:
+        tmp1 = pattern7.group(1)
+        tmp2 = pattern7.group(2)
+        if len(tmp1) > len(tmp2):
+            tmp_name = tmp1
+        else:
+            tmp_name = tmp2
+    elif pattern2:
+        tmp_name = pattern2.group(1)
+            
+    return tmp_name
 
-    return name.replace(' ', '').replace('　', '')
-
-def HTMLparser(pairs, spt, num):
-    template_url = "https://www.animecharactersdatabase.com/jp/source.php?id="
+def charactersearcher(title, page):
+    characters = []
     tmp_pairs = []
+    lines = page.split('\n')    
+    line_num = 0  
+    
+    for line in lines:
+        if line.find('声 - ') > -1:
+            character_m = MC.character_r.search(lines[line_num-1])
+            if character_m:
+                tmp_character = character_m.group(1)
+                characters.append(tmp_character)
+        line_num += 1 
+                
+    for character in characters:
+        tmp_pairs.append((namefilter(character), title))
 
-    for page_id in range(1+spt*num, spt+spt*num+1):
-        url = template_url + str(page_id)
+    return tmp_pairs
+
+def titleconnector(pairs, titles, spt, num):
+    for i in range(spt*num, spt*(1+num)):
+        try:
+            characters_url = "https://ja.wikipedia.org/wiki/"+titles[i].replace(' ', '_')+"の登場人物"
+            exist_flag = True
+            print(str(i)+" "+titles[i])
+        
+            while True:
+                try:
+                    htmldata = urllib2.urlopen(characters_url)
+                    page = htmldata.read()
+                    htmldata.close()
+                    break
+                except urllib2.URLError, err:
+                    exist_flag = False
+                    #print(str(err))
+                    break
+                except urllib2.HTTPError, err:
+                    print("Connection failed, trying again...")
+            
+            if not exist_flag:
+                exist_flag = True
+                characters_url = "https://ja.wikipedia.org/wiki/"+titles[i].replace(' ', '_')
+            
+                while True:
+                    try:
+                        htmldata = urllib2.urlopen(characters_url)
+                        page = htmldata.read()
+                        htmldata.close()
+                        break
+                    except urllib2.URLError, err:
+                        exist_flag = False
+                        #print(str(err))
+                        break
+                    except urllib2.HTTPError, err:
+                        print("Connection failed, trying again...")
+
+            pairs.extend(charactersearcher(titles[i], page))
+            print(str(i)+" done!")
+        except UnboundLocalError, err:
+            print("falured "+titles[i])
+    
+    
+
+def HTMLparser(pairs):
+    template_url = "https://ja.wikipedia.org/wiki/日本のテレビアニメ作品一覧_"
+    line_num = 0
+    titles = []
+
+    # タイトル検索
+    for initial in MC.hiragana:
+        url = template_url + initial
         page = ""
-
+    
         while True:
             try:
                 htmldata = urllib2.urlopen(url)
                 page = htmldata.read()
+                htmldata.close()
                 break
             except urllib2.URLError, err:
                 print("Connection failed, trying again...")
             except urllib2.HTTPError, err:
                 print("Connection failed, trying again...")
-
-        # キャラクター検索
-        characters = []
-        character_recog = re.compile("(.*)\<div class=tile1top\>\<(.*)\>(.*)\<(.*)\>\<(.*)\>")
-
+            
         lines = page.split('\n')
-        
+            
         for line in lines:
-            tmp_recog = character_recog.search(line)
-            if tmp_recog:
-                characters.append(tmp_recog.group(3))
+            title_m = MC.title_r1.search(line)
+            if title_m:
+                tmp_title = title_m.group(2)
+                titles.append(tmp_title)
+                print("作品名: "+tmp_title)
+                line_num += 1
+            else:
+                title_m = MC.title_r2.search(line)
+                if title_m:
+                    tmp_title = title_m.group(2)
+                    titles.append(tmp_title)
+                    print("作品名: "+tmp_title)
+                    line_num += 1
+            
+    print("found " + str(line_num) + " animations!")
 
-
-        # タイトル検索
-        line_num = 0
-        title = ""
-
-        for line in lines:
-            line_num += 1
-            if line.find('日本語タイトル') > -1:
-                title_r = re.compile("(.*)\<(.*)\>\<(.*)\>(.*)\<(.*)\>\<(.*)\>")
-                title_m = title_r.search(lines[line_num])
-                title = title_m.group(4)
-                print(str(page_id)+" 作品名: "+title)
-                break
-
-        for character in characters:
-            tmp_pairs.append((namefilter(character), title))
-            #print(namefilter(character))   
-        
-        #print unicode(htmldata.read(),"utf-8")
-        htmldata.close()
-
-    pairs.extend(tmp_pairs)
+    threads = []
+    threads_size = 20
+    sites = 200
+    spt = int(sites/threads_size)
+    
+    # キャラクター検索
+    for i in range(0, threads_size):
+        threads.append(Thread(target=titleconnector, args=(pairs, titles, spt, i, )))
+        threads[i].daemon = True
+        threads[i].start()
+    for i in range(0, threads_size):
+        threads[i].join()
+   
 
 def NEologdsearch(word):
     
     elements = MC.m.parse(word).split('\n')
-
+    #print(word)
     for element in elements:
-        splitted_element = re.split(u'\t|,', element)
-        if (splitted_element[MC.name] == word) and (splitted_element[MC.speech_type] == "人名"):
-            return True
+        splitted_element = []
+        try:
+            splitted_element = re.split(u'\t|,', element)
+            if (splitted_element[MC.name] == word) and (splitted_element[MC.speech_type] == "人名"):
+                return True
+        except IndexError, err:
+            return False
 
     return False
         
@@ -139,21 +216,9 @@ if __name__ == "__main__":
     written = 0
     non_written = 0
 
-    threads = []
-    # 3スレッド以上だとよくConnection Refuseされる
-    threads_size = 2
-    # 作品数指定
-    sites = 6061
-    spt = int(sites/threads_size)
-
     start = time.time()
-    
-    for i in range(0, threads_size):
-        threads.append(Thread(target=HTMLparser, args=(pairs, spt, i, )))
-        threads[i].daemon = True
-        threads[i].start()
-    for i in range(0, threads_size):
-        threads[i].join()
+
+    HTMLparser(pairs)
 
     elapsed_time = time.time() - start
     print(("elapsed_time:{0}".format(round(elapsed_time,2))) + "[sec]")
