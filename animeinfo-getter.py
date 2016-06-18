@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 from threading import Thread
+from socket import error as SocketError
+import errno
 import urllib2
 import time
 import math
@@ -93,7 +95,13 @@ def charactersearcher(title, page):
 
     return tmp_pairs
 
+count = 0
+sites = 10
+threads_size = 2
+
 def titleconnector(pairs, titles, spt, num):
+    global count
+    
     for i in range(spt*num, spt*(1+num)):
         try:
             characters_url = "https://ja.wikipedia.org/wiki/"+titles[i].replace(' ', '_')+"の登場人物"
@@ -112,6 +120,8 @@ def titleconnector(pairs, titles, spt, num):
                     break
                 except urllib2.HTTPError, err:
                     print("Connection failed, trying again...")
+                except SocketError as e:
+                    print("Connection reset by peer, trying again...")
             
             if not exist_flag:
                 exist_flag = True
@@ -129,10 +139,14 @@ def titleconnector(pairs, titles, spt, num):
                         break
                     except urllib2.HTTPError, err:
                         print("Connection failed, trying again...")
+                    except SocketError as e:
+                        print("Connection reset by peer, trying again...")
 
             pairs.extend(charactersearcher(titles[i], page))
-            print(str(i)+" done!")
+            count += 1
+            print(str(100.0*count/sites)+"% done!")
         except UnboundLocalError, err:
+            count += 1
             print("falured "+titles[i])
     
     
@@ -157,6 +171,8 @@ def HTMLparser(pairs):
                 print("Connection failed, trying again...")
             except urllib2.HTTPError, err:
                 print("Connection failed, trying again...")
+            except SocketError as e:
+                print("Connection reset by peer, trying again...")
             
         lines = page.split('\n')
             
@@ -178,8 +194,8 @@ def HTMLparser(pairs):
     print("found " + str(line_num) + " animations!")
 
     threads = []
-    threads_size = 20
-    sites = 200
+    global sites
+    sites = line_num
     spt = int(sites/threads_size)
     
     # キャラクター検索
@@ -222,6 +238,9 @@ if __name__ == "__main__":
 
     elapsed_time = time.time() - start
     print(("elapsed_time:{0}".format(round(elapsed_time,2))) + "[sec]")
+
+    nf = open('falured_data.csv', 'w')
+    ncsvWriter = csv.writer(nf)
     
     for pair in pairs:
         if NEologdsearch(pair[0]):
@@ -229,9 +248,17 @@ if __name__ == "__main__":
             metadict[pair[0]] = pair[1]
             tmp_written += 1
         else:
+            nwriteData = []
+            # 単語名
+            nwriteData.append(pair[0])
+            # メタ情報
+            nwriteData.append(pair[1])
+            ncsvWriter.writerow(nwriteData)
             non_written += 1
+
+    nf.close()
     
-    f = open('data.csv', 'w')
+    f = open('succeeded_data.csv', 'w')
     csvWriter = csv.writer(f)
 
     # CSVファイルへ書き込み
