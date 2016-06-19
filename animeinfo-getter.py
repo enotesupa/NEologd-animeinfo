@@ -13,8 +13,8 @@ import MeCab
 count = 0
 # 暫定検索サイト数(調整したい場合はここ)
 sites = 10
-# 検索スレッド数
-threads_size = 3
+# 検索スレッド数(多すぎると帯域を占有してまともにブラウジングできなくなるので注意)
+threads_size = 2
 
 class MC:
     # UbuntuにおけるNEologdのインストール先(ディストリビューションごとにここを変更)
@@ -253,7 +253,7 @@ def NEologdsearch(word):
             # NEologdの実行結果文字列の整形
             splitted_element = re.split(u'\t|,', element)
             if (splitted_element[MC.name] == word) and (splitted_element[MC.speech_type] == "人名"):
-                # 入力文字列と出力文字列が一致し、人名であれば真
+                # 入力文字列と出力文字列が一致し、かつ人名であれば真
                 return True
         except IndexError, err:
             # 空文字が残った時
