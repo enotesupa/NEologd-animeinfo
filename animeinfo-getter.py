@@ -97,7 +97,7 @@ def charactersearcher(title, page):
 
 count = 0
 sites = 10
-threads_size = 2
+threads_size = 3
 
 def titleconnector(pairs, titles, spt, num):
     global count
@@ -114,43 +114,41 @@ def titleconnector(pairs, titles, spt, num):
                     page = htmldata.read()
                     htmldata.close()
                     break
-                except urllib2.URLError, err:
-                    exist_flag = False
-                    #print(str(err))
-                    break
-                except urllib2.HTTPError, err:
-                    print("Connection failed, trying again...")
-                except SocketError as e:
-                    print("Connection reset by peer, trying again...")
-            
-            if not exist_flag:
-                exist_flag = True
-                characters_url = "https://ja.wikipedia.org/wiki/"+titles[i].replace(' ', '_')
-            
-                while True:
+                except urllib2.URLError, err1:
                     try:
+                        characters_url = "https://ja.wikipedia.org/wiki/"+titles[i].replace(' ', '_')+"の登場人物一覧"
                         htmldata = urllib2.urlopen(characters_url)
                         page = htmldata.read()
                         htmldata.close()
                         break
-                    except urllib2.URLError, err:
-                        exist_flag = False
-                        #print(str(err))
-                        break
-                    except urllib2.HTTPError, err:
-                        print("Connection failed, trying again...")
+                    except urllib2.URLError, err2:
+                        try:
+                            characters_url = "https://ja.wikipedia.org/wiki/"+titles[i].replace(' ', '_')
+                            htmldata = urllib2.urlopen(characters_url)
+                            page = htmldata.read()
+                            htmldata.close()
+                            break
+                        except urllib2.URLError, err3:
+                            exist_flag = False
+                            break
+                        except SocketError as e:
+                            print("Connection reset by peer, trying again...")                        
                     except SocketError as e:
                         print("Connection reset by peer, trying again...")
-
-            pairs.extend(charactersearcher(titles[i], page))
+                except SocketError as e:
+                    print("Connection reset by peer, trying again...")
+            
+            if exist_flag:
+                pairs.extend(charactersearcher(titles[i], page))                
+            else:
+                print("falured "+titles[i])
+                exist_flag = True
             count += 1
             print(str(100.0*count/sites)+"% done!")
         except UnboundLocalError, err:
             count += 1
             print("falured "+titles[i])
-    
-    
-
+       
 def HTMLparser(pairs):
     template_url = "https://ja.wikipedia.org/wiki/日本のテレビアニメ作品一覧_"
     line_num = 0
@@ -168,8 +166,6 @@ def HTMLparser(pairs):
                 htmldata.close()
                 break
             except urllib2.URLError, err:
-                print("Connection failed, trying again...")
-            except urllib2.HTTPError, err:
                 print("Connection failed, trying again...")
             except SocketError as e:
                 print("Connection reset by peer, trying again...")
@@ -207,10 +203,8 @@ def HTMLparser(pairs):
         threads[i].join()
    
 
-def NEologdsearch(word):
-    
+def NEologdsearch(word):    
     elements = MC.m.parse(word).split('\n')
-    #print(word)
     for element in elements:
         splitted_element = []
         try:
@@ -253,25 +247,30 @@ if __name__ == "__main__":
             nwriteData.append(pair[0])
             # メタ情報
             nwriteData.append(pair[1])
-            ncsvWriter.writerow(nwriteData)
+            # 課題用にcsv書き込み機能は停止
+            #ncsvWriter.writerow(nwriteData)
             non_written += 1
 
     nf.close()
-    
+
+    ftxt = open('result.txt', 'w')        
     f = open('succeeded_data.csv', 'w')
     csvWriter = csv.writer(f)
 
-    # CSVファイルへ書き込み
-    for key,value in metadict.items():
+    # CSVとTXTファイルへ書き込み
+    for key,value in sorted(metadict.items(), key=lambda x:x[1]):
         writeData = []
         # 単語名
         writeData.append(key)
         # メタ情報
         writeData.append(value)
-        csvWriter.writerow(writeData)
+        # 課題用にcsv書き込み機能は停止
+        #csvWriter.writerow(writeData)
+        ftxt.write(writeData[0]+"\t"+writeData[1].replace('　', '_').replace(' ', '_')+"\n")
         written += 1
         
     f.close()
+    ftxt.close()
 
     print(str(written)+" characters written!")
     print(str(tmp_written-written)+" characters duplicated!")
